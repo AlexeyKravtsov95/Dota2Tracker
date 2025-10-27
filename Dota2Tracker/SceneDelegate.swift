@@ -22,7 +22,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = splashViewController
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.window?.rootViewController = ViewController()
+            self.window?.rootViewController = WelcomeViewController()
             let mask = CALayer()
             mask.frame = splashViewController.logoImageView.frame
             mask.contents = UIImage(named: "appLogo")?.cgImage
