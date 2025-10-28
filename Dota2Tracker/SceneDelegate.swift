@@ -22,14 +22,14 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = splashViewController
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            self.window?.rootViewController = WelcomeViewController()
+            self.window?.rootViewController = TabBarController()
             let mask = CALayer()
             mask.frame = splashViewController.logoImageView.frame
             mask.contents = UIImage(named: "appLogo")?.cgImage
             self.window?.layer.mask = mask
 
-            SplashAnimator.addRotationAnimation(to: mask, duration: 1.0)
-            SplashAnimator.addScalingAnimation(to: mask, duration: 1.0)
+            SplashAnimator.addScalingAnimation(to: mask, duration: 0.5)
+            SplashAnimator.addRotationAnimation(to: mask, duration: 0.5)
         }
     }
 }

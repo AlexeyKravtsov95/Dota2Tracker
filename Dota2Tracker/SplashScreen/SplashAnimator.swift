@@ -22,7 +22,7 @@ final class SplashAnimator {
         let animation = CAKeyframeAnimation(keyPath: "bounds")
         let width = layer.frame.width
         let height = layer.frame.height
-        let coef: CGFloat = 18 / 400
+        let coef: CGFloat = 18 / 200
         let finalScale = coef * UIScreen.main.bounds.height
         let scales: [CGFloat] = [1, 0.85, finalScale]
 
