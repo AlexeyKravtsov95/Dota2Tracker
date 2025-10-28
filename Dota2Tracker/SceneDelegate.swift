@@ -28,8 +28,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             mask.contents = UIImage(named: "appLogo")?.cgImage
             self.window?.layer.mask = mask
 
-            SplashAnimator.addRotationAnimation(to: mask, duration: 1.0)
-            SplashAnimator.addScalingAnimation(to: mask, duration: 1.0)
+            SplashAnimator.addScalingAnimation(to: mask, duration: 0.7)
+            SplashAnimator.addRotationAnimation(to: mask, duration: 0.7)
         }
     }
 }

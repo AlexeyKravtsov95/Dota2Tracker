@@ -16,4 +16,10 @@ enum Palette {
         static var violetDeep = UIColor(red: 0.14, green: 0.00, blue: 0.31, alpha: 1).cgColor
         static var blueDeep = UIColor(red: 0.00, green: 0.16, blue: 0.39, alpha: 1).cgColor
     }
+
+    enum TabBar {
+        static var selectedItemColor = UIColor(red: 0.201, green: 0.227, blue: 0.546, alpha: 1)
+        static var nonSelectedItemColor = UIColor(red: 0.313, green: 0.323, blue: 0.456, alpha: 1)
+        static var mainColor = UIColor(red: 0.061, green: 0.065, blue: 0.138, alpha: 1)
+    }
 }
