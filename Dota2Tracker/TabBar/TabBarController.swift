@@ -6,10 +6,10 @@ final class TabBarController: UITabBarController {
     private let tabBarColor = #colorLiteral(red: 0.06141165644, green: 0.06498453766, blue: 0.1378280222, alpha: 1)
 
     //App Controllers
-    let welcomeTabController = WelcomeViewController()
-    let liveTabController = LiveViewController()
-    let ladderTabController = LadderViewController()
-    let analyticsTabController = AnalyticsViewController()
+    let welcomeNavBarController = UINavigationController(rootViewController: WelcomeViewController())
+    let liveNavBarController = UINavigationController(rootViewController: LiveViewController())
+    let ladderNavBarController = UINavigationController(rootViewController:LadderViewController())
+    let analyticsNavBarController = UINavigationController(rootViewController:AnalyticsViewController())
 
     //TabBar Buttons
     private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: mainColor)
@@ -63,20 +63,16 @@ final class TabBarController: UITabBarController {
         view.addSubview(tabBarSecondView)
         tabBar.isHidden = true
 
-        let welcomeNavBarController = UINavigationController(rootViewController: welcomeTabController)
-        let liveNavBarController = UINavigationController(rootViewController: liveTabController)
-        let ladderNavBarController = UINavigationController(rootViewController: ladderTabController)
-        let analyticsNavBarController = UINavigationController(rootViewController: analyticsTabController)
-
         welcomeNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
+
         liveNavBarController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
         ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
         analyticsNavBarController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
 
-        setViewControllers([welcomeTabController,
-                            liveTabController,
-                            ladderTabController,
-                            analyticsTabController], animated: false)
+        setViewControllers([welcomeNavBarController,
+                            liveNavBarController,
+                            ladderNavBarController,
+                            analyticsNavBarController], animated: false)
 
         NSLayoutConstraint.activate([
             customBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -89,35 +85,6 @@ final class TabBarController: UITabBarController {
             tabBarSecondView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tabBarSecondView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
-    }
-
-    private func getButton(icon: String, tag: Int, action: UIAction, tintColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UIButton {
-        return {
-            $0.setImage(UIImage(systemName: icon), for: .normal)
-            $0.tintColor = tintColor
-            $0.tag = tag
-            return $0
-        }(UIButton(primaryAction: action))
-    }
-
-    private func getTitle(text: String, tag: Int, textColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UILabel {
-        return {
-            $0.text = text
-            $0.textAlignment = .center
-            $0.textColor = textColor
-            $0.font = .systemFont(ofSize: 10)
-            $0.tag = tag
-            return $0
-        }(UILabel())
-    }
-
-    private func getTabBarElement(buttons: UIButton, title: UILabel) -> UIStackView {
-        return {
-            $0.axis = .vertical
-            $0.alignment = .center
-            $0.spacing = 3
-            return $0
-        }(UIStackView(arrangedSubviews: [buttons, title]))
     }
 
     //Buttons Action
