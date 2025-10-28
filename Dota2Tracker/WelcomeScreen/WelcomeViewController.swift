@@ -8,13 +8,10 @@
 import UIKit
 
 final class WelcomeViewController: UIViewController {
-    private lazy var bg: CAGradientLayer = {
-        let layer = CAGradientLayer()
-        layer.frame = view.bounds
-        layer.colors = [Palette.Gradient.violetDeep, Palette.Gradient.blueDeep]
-        layer.startPoint = CGPoint(x: 0.0, y: 0.0)
-        layer.endPoint = CGPoint(x: 1.0, y: 1.0)
-        return layer
+    private lazy var bg: GradientBackgrounView = {
+        let background = GradientBackgrounView()
+        background.translatesAutoresizingMaskIntoConstraints = false
+        return background
     }()
 
     private lazy var anim: CABasicAnimation = {
@@ -85,6 +82,7 @@ final class WelcomeViewController: UIViewController {
         stack.alignment = .center
         stack.distribution = .fill
         stack.spacing = 24
+        stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
     }()
 
@@ -95,14 +93,14 @@ final class WelcomeViewController: UIViewController {
 
         let view = UIView()
         view.backgroundColor = .white
-        view.layer.insertSublayer(bg, at: 0)
         self.view = view
-        bg.add(anim, forKey: "parallax")
+
+        view.addSubview(bg)
 
         [logo, titleLabel, textField, searchButton].forEach {
             stack.addArrangedSubview($0)
         }
-        stack.translatesAutoresizingMaskIntoConstraints = false
+
         container.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(container)
         container.addSubview(stack)
@@ -116,8 +114,12 @@ final class WelcomeViewController: UIViewController {
         super.viewDidLayoutSubviews()
 
         let margins = view.layoutMarginsGuide
-        bg.frame = view.bounds
         NSLayoutConstraint.activate([
+            bg.topAnchor.constraint(equalTo: view.topAnchor),
+            bg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
             logo.heightAnchor.constraint(equalToConstant: 112),
             container.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 86),
             container.centerXAnchor.constraint(equalTo: view.centerXAnchor),
