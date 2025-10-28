@@ -63,15 +63,20 @@ final class TabBarController: UITabBarController {
         view.addSubview(tabBarSecondView)
         tabBar.isHidden = true
 
-        welcomeTabNavController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
-        liveTabNavController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
-        ladderTabNavController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
-        analyticsTabNavController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
+        let welcomeNavBarController = UINavigationController(rootViewController: welcomeTabController)
+        let liveNavBarController = UINavigationController(rootViewController: liveTabController)
+        let ladderNavBarController = UINavigationController(rootViewController: ladderTabController)
+        let analyticsNavBarController = UINavigationController(rootViewController: analyticsTabController)
 
-        setViewControllers([welcomeTabNavController,
-                            liveTabNavController,
-                            ladderTabNavController,
-                            analyticsTabNavController], animated: false)
+        welcomeNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
+        liveNavBarController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
+        ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
+        analyticsNavBarController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
+
+        setViewControllers([welcomeTabController,
+                            liveTabController,
+                            ladderTabController,
+                            analyticsTabController], animated: false)
 
         NSLayoutConstraint.activate([
             customBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
