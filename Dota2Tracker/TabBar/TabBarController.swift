@@ -1,24 +1,24 @@
 import UIKit
 
 final class TabBarController: UITabBarController {
-    private let mainColor = #colorLiteral(red: 0.2017591894, green: 0.2275671363, blue: 0.5467777252, alpha: 1)
-    private let secondColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)
-    private let tabBarColor = #colorLiteral(red: 0.06141165644, green: 0.06498453766, blue: 0.1378280222, alpha: 1)
+    private let selected = Palette.TabBar.selectedItemColor
+    private let nonSelected = Palette.TabBar.nonSelectedItemColor
+    private let main = Palette.TabBar.mainColor
 
     //App Controllers
-    let welcomeNavBarController = UINavigationController(rootViewController: WelcomeViewController())
+    let overviewNavBarController = UINavigationController(rootViewController: OverviewViewController())
     let liveNavBarController = UINavigationController(rootViewController: LiveViewController())
     let ladderNavBarController = UINavigationController(rootViewController:LadderViewController())
     let analyticsNavBarController = UINavigationController(rootViewController:AnalyticsViewController())
 
     //TabBar Buttons
-    private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: mainColor)
+    private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: selected)
     private lazy var liveButton = getButton(icon: "play.fill", tag: 1, action: action)
     private lazy var ladderButton = getButton(icon: "trophy.fill", tag: 2, action: action)
     private lazy var analyticsButton = getButton(icon: "align.vertical.bottom.fill", tag: 3, action: action)
 
     //TabBar Buttons Titles
-    private lazy var houseTitle = getTitle(text: "OverView", tag: 0, textColor: mainColor)
+    private lazy var houseTitle = getTitle(text: "Overview", tag: 0, textColor: selected)
     private lazy var liveTitle = getTitle(text: "Live", tag: 1)
     private lazy var ladderTitle = getTitle(text: "Ladder", tag: 2)
     private lazy var analyticsTitle = getTitle(text: "Analytics", tag: 3)
@@ -30,7 +30,7 @@ final class TabBarController: UITabBarController {
     private lazy var analyticsElement = getTabBarElement(buttons: analyticsButton, title: analyticsTitle)
 
     private lazy var tabBarSecondView: UIView = {
-        $0.backgroundColor = tabBarColor
+        $0.backgroundColor = main
         $0.translatesAutoresizingMaskIntoConstraints = false
         return $0
     }(UIView())
@@ -39,7 +39,7 @@ final class TabBarController: UITabBarController {
         $0.axis = .horizontal
         $0.distribution = .equalSpacing
         $0.alignment = .center
-        $0.backgroundColor = tabBarColor
+        $0.backgroundColor = main
         $0.layer.cornerRadius = 22
         $0.layer.zPosition = 1
         $0.translatesAutoresizingMaskIntoConstraints = false
@@ -63,13 +63,13 @@ final class TabBarController: UITabBarController {
         view.addSubview(tabBarSecondView)
         tabBar.isHidden = true
 
-        welcomeNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
+        overviewNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
 
         liveNavBarController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
         ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
         analyticsNavBarController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
 
-        setViewControllers([welcomeNavBarController,
+        setViewControllers([overviewNavBarController,
                             liveNavBarController,
                             ladderNavBarController,
                             analyticsNavBarController], animated: false)
@@ -101,9 +101,9 @@ final class TabBarController: UITabBarController {
     private func setButtonColor(tag: Int) {
         [houseButton, liveButton, ladderButton, analyticsButton,].forEach { button in
             if button.tag != tag {
-                button.tintColor = secondColor
+                button.tintColor = nonSelected
             } else {
-                button.tintColor = mainColor
+                button.tintColor = selected
             }
         }
     }
@@ -111,9 +111,9 @@ final class TabBarController: UITabBarController {
     private func setTitleColor(tag: Int) {
         [houseTitle, liveTitle, ladderTitle, analyticsTitle,].forEach { title in
             if title.tag != tag {
-                title.textColor = secondColor
+                title.textColor = nonSelected
             } else {
-                title.textColor = mainColor
+                title.textColor = selected
             }
         }
     }

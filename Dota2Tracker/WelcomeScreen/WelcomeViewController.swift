@@ -74,6 +74,7 @@ final class WelcomeViewController: UIViewController {
         button.addAction(UIAction {
             [weak self] _ in
             self?.textField.resignFirstResponder()
+            self?.goToFirstTab()
         }, for: .touchUpInside)
         return button
     }()
@@ -134,5 +135,15 @@ final class WelcomeViewController: UIViewController {
             searchButton.widthAnchor.constraint(equalTo: container.widthAnchor),
             searchButton.heightAnchor.constraint(equalToConstant: 56),
         ])
+    }
+
+    private func goToFirstTab() {
+        let tabBarController = TabBarController()
+        if let window = view.window?.windowScene?.windows.first {
+            window.rootViewController = tabBarController
+            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
+                window.rootViewController = tabBarController
+            }, completion: nil)
+        }
     }
 }
