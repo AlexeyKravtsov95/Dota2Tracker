@@ -1,35 +1,27 @@
 import UIKit
 
-enum Tabs: Int {
-    case first
-    case second
-    case third
-    case fourth
-    case fifth
-}
-
 final class TabBarController: UITabBarController {
     private let mainColor = #colorLiteral(red: 0.2017591894, green: 0.2275671363, blue: 0.5467777252, alpha: 1)
     private let secondColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)
     private let tabBarColor = #colorLiteral(red: 0.06141165644, green: 0.06498453766, blue: 0.1378280222, alpha: 1)
 
     //App Controllers
-    let welcomeTabNavController = UINavigationController(rootViewController: WelcomeViewController())
-    let liveTabNavController = UINavigationController(rootViewController: LiveViewController())
-    let ladderTabNavController = UINavigationController(rootViewController: LadderViewController())
-    let analyticsTabNavController = UINavigationController(rootViewController: AnalyticsViewController())
+    let welcomeTabController = WelcomeViewController()
+    let liveTabController = LiveViewController()
+    let ladderTabController = LadderViewController()
+    let analyticsTabController = AnalyticsViewController()
 
     //TabBar Buttons
-    private lazy var houseButton = getButton(icon: "house.fill", tag: .first, action: action, tintColor: mainColor)
-    private lazy var liveButton = getButton(icon: "play.fill", tag: .second, action: action)
-    private lazy var ladderButton = getButton(icon: "trophy.fill", tag: .third, action: action)
-    private lazy var analyticsButton = getButton(icon: "align.vertical.bottom.fill", tag: .fourth, action: action)
+    private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: mainColor)
+    private lazy var liveButton = getButton(icon: "play.fill", tag: 1, action: action)
+    private lazy var ladderButton = getButton(icon: "trophy.fill", tag: 2, action: action)
+    private lazy var analyticsButton = getButton(icon: "align.vertical.bottom.fill", tag: 3, action: action)
 
     //TabBar Buttons Titles
-    private lazy var houseTitle = getTitle(text: "OverView", tag: .first, textColor: mainColor)
-    private lazy var liveTitle = getTitle(text: "Live", tag: .second)
-    private lazy var ladderTitle = getTitle(text: "Ladder", tag: .third)
-    private lazy var analyticsTitle = getTitle(text: "Analytics", tag: .fourth)
+    private lazy var houseTitle = getTitle(text: "OverView", tag: 0, textColor: mainColor)
+    private lazy var liveTitle = getTitle(text: "Live", tag: 1)
+    private lazy var ladderTitle = getTitle(text: "Ladder", tag: 2)
+    private lazy var analyticsTitle = getTitle(text: "Analytics", tag: 3)
 
     //TabBar Elements
     private lazy var houseElement = getTabBarElement(buttons: houseButton, title: houseTitle)
@@ -71,10 +63,10 @@ final class TabBarController: UITabBarController {
         view.addSubview(tabBarSecondView)
         tabBar.isHidden = true
 
-        welcomeTabNavController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: Tabs.first.rawValue)
-        liveTabNavController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: Tabs.second.rawValue)
-        ladderTabNavController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: Tabs.third.rawValue)
-        analyticsTabNavController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: Tabs.fourth.rawValue)
+        welcomeTabNavController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
+        liveTabNavController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
+        ladderTabNavController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
+        analyticsTabNavController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
 
         setViewControllers([welcomeTabNavController,
                             liveTabNavController,
@@ -94,22 +86,22 @@ final class TabBarController: UITabBarController {
         ])
     }
 
-    private func getButton(icon: String, tag: Tabs, action: UIAction, tintColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UIButton {
+    private func getButton(icon: String, tag: Int, action: UIAction, tintColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UIButton {
         return {
             $0.setImage(UIImage(systemName: icon), for: .normal)
             $0.tintColor = tintColor
-            $0.tag = tag.rawValue
+            $0.tag = tag
             return $0
         }(UIButton(primaryAction: action))
     }
 
-    private func getTitle(text: String, tag: Tabs, textColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UILabel {
+    private func getTitle(text: String, tag: Int, textColor: UIColor = #colorLiteral(red: 0.3128828704, green: 0.3234004974, blue: 0.4565579295, alpha: 1)) -> UILabel {
         return {
             $0.text = text
             $0.textAlignment = .center
             $0.textColor = textColor
             $0.font = .systemFont(ofSize: 10)
-            $0.tag = tag.rawValue
+            $0.tag = tag
             return $0
         }(UILabel())
     }
