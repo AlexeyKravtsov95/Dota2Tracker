@@ -38,15 +38,17 @@ jobs:
 
       - name: Run AI Inline Review (inline script)
         env:
+          # GitHub
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_FULL:     ${{ github.repository }}
           PR_NUMBER:     ${{ github.event.pull_request.number }}
           BASE_SHA:      ${{ github.event.pull_request.base.sha }}
           HEAD_SHA:      ${{ github.event.pull_request.head.sha }}
-          AI_API_URL:    ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
-          AI_API_KEY:    ${{ secrets.AI_API_KEY }}
-          AI_API_HDR:    ${{ vars.AI_API_HDR || 'Authorization' }}   # или 'x-api-key'
-          AI_API_MODEL:  openai/gpt-oss-120b
+          # AI service
+          AI_API_URL:   ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
+          AI_API_KEY:   ${{ secrets.AI_API_KEY }}
+          AI_API_HDR:   ${{ vars.AI_API_HDR || 'Authorization' }}   # 'Authorization' или 'x-api-key'
+          AI_API_MODEL: openai/gpt-oss-120b
         run: |
           python - << 'PY'
           import os, sys, subprocess, json, requests
@@ -65,6 +67,7 @@ jobs:
           def run(cmd):
               return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
 
+          # 1) Unified diff U=0 (чтобы номера строк new-файла совпадали)
           try:
               diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
           except subprocess.CalledProcessError as e:
@@ -75,6 +78,7 @@ jobs:
               print("::notice::Empty diff. Nothing to review.")
               sys.exit(0)
 
+          # 2) Соберём карту добавленных строк
           files=[]; current=None; new_line=None
           for line in diff.splitlines():
               if line.startswith("diff --git "):
@@ -99,20 +103,20 @@ jobs:
                       else:
                           new_line+=1
 
+          # 3) Обрежем очень большие PR
           MAX_CHARS=120_000
           diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
+          # 4) Промпт под UIKit + SwiftUI + URLSession
           system_prompt = """You are a senior iOS code reviewer.
-          Project styles:
-          - UIKit and SwiftUI coexist. UI is code-only (no storyboards/xibs).
-          - Networking via URLSession (async/await preferred), MVVM/Services.
+          Project styles: UIKit and SwiftUI (code-only UI, no storyboards/xibs). Networking via URLSession (async/await), MVVM/Services.
           Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary.
 
           Focus:
-          • UIKit: constraints in loadView/viewDidLoad (not viewDidLayoutSubviews); [weak self]; main-thread UI; CALayer perf; accessibility.
-          • SwiftUI: correct @State/@StateObject/@ObservedObject/@EnvironmentObject; cancel Task on disappear; avoid heavy logic in View.
+          • UIKit: constraints in loadView/viewDidLoad (not viewDidLayoutSubviews); [weak self]; main-thread UI; CALayer/CAGradientLayer perf; accessibility.
+          • SwiftUI: correct @State/@StateObject/@ObservedObject/@EnvironmentObject; avoid heavy logic in View; cancel Task on disappear; no UI off main.
           • URLSession: async/await; timeouts; waitsForConnectivity; retry/backoff; safe Decodable; no secrets in logs; DI for tests.
-          • General: localization (no hard-coded user strings), error handling surfaced to user, performance, style consistency, SPM pinning.
+          • General: localization (no hard-coded user strings), safe error handling, performance, style consistency (Swift), SPM pinning.
 
           Return STRICT JSON ONLY:
           {
@@ -122,17 +126,18 @@ jobs:
             ]
           }
           Paths MUST match +++ b/<path> in diff. Lines MUST be added lines only. No prose outside JSON."""
-          
+
           user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
 
           payload = {
               "model": AI_MODEL,
-              "temperature": 0.15,
+              "temperature": 0.10,
               "messages": [
                   {"role":"system","content": system_prompt},
                   {"role":"user","content":   user_prompt}
               ],
-              "max_tokens": 2000
+              "max_tokens": 2000,
+              "response_format": {"type": "json_object"}  # требуем чистый JSON
           }
 
           headers={"Content-Type":"application/json"}
@@ -142,6 +147,7 @@ jobs:
               else:
                   headers[AI_HDR]=AI_KEY
 
+          # 5) Вызов AI и устойчивое извлечение контента (content / reasoning_content / text / output_text)
           try:
               resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
               status = resp.status_code
@@ -151,22 +157,33 @@ jobs:
 
           content = None
           try:
-              content = data.get("choices",[{}])[0].get("message",{}).get("content")
+              choice0 = (data.get("choices") or [{}])[0]
+              msg = choice0.get("message") or {}
+              content = msg.get("content")
+              if not content:
+                  content = msg.get("reasoning_content")
+              if not content:
+                  content = choice0.get("text")
+              if not content:
+                  content = data.get("output_text")
           except Exception:
               pass
-          if not content:
-              content = data.get("choices",[{}])[0].get("text")
-          if not content:
-              content = data.get("output_text")
+
           if content is None:
               preview = ""
               try: preview = json.dumps(data)[:600]
               except Exception: preview = str(data)[:600]
-              content = json.dumps({"summary": f"AI endpoint returned no content (status={status}). Raw preview: {preview}", "comments": []})
+              content = json.dumps({"summary": f"AI endpoint returned no content field (status={status}). Raw preview: {preview}", "comments": []})
 
           def extract_json(s):
               s = "" if s is None else (s if isinstance(s,str) else str(s))
               s = s.strip()
+              # попробуем напрямую как JSON:
+              try:
+                  return json.loads(s)
+              except Exception:
+                  pass
+              # иначе вырежем внешний {...}
               try:
                   i = s.find('{'); j = s.rfind('}')
                   return json.loads(s[i:j+1]) if i!=-1 and j!=-1 else {"summary": s[:2000], "comments": []}
@@ -178,6 +195,7 @@ jobs:
           comments = result.get("comments",[])
           if not isinstance(comments,list): comments=[]
 
+          # 6) Валидация: оставляем комментарии только на реально добавленные строки
           added_map={}
           for f in files:
               if not f["path"]: continue
@@ -190,6 +208,7 @@ jobs:
               if path in added_map and isinstance(line,int) and line in added_map[path] and body:
                   filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
 
+          # 7) Публикуем review с инлайнами (или fallback — summary)
           session = requests.Session()
           session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
 
