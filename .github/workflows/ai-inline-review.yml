@@ -1,0 +1,42 @@
+name: AI Inline Review (custom endpoint)
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run AI Inline Review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_FULL: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+          AI_API_URL:   ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
+          AI_API_KEY:   ${{ secrets.AI_API_KEY }}
+          AI_API_MODEL: ${{ vars.AI_API_MODEL || 'openai/gpt-oss-120b' }}  
+        run: |
+          python .github/scripts/ai_review.py
