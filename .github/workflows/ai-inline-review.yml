@@ -1,5 +1,5 @@
 # .github/workflows/ai-inline-review.yml
-name: AI Inline Review (custom endpoint, OpenAI-OSS 120B)
+name: AI Inline Review (custom endpoint, OpenAI-OSS 120B, RU)
 
 on:
   pull_request_target:
@@ -67,7 +67,7 @@ jobs:
           def run(cmd):
               return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
 
-          # 1) Unified diff U=0 (чтобы номера строк new-файла совпадали)
+          # 1) unified diff (U=0 — точные номера новых строк)
           try:
               diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
           except subprocess.CalledProcessError as e:
@@ -78,7 +78,7 @@ jobs:
               print("::notice::Empty diff. Nothing to review.")
               sys.exit(0)
 
-          # 2) Соберём карту добавленных строк
+          # 2) карта добавленных строк по файлам
           files=[]; current=None; new_line=None
           for line in diff.splitlines():
               if line.startswith("diff --git "):
@@ -103,26 +103,28 @@ jobs:
                       else:
                           new_line+=1
 
-          # 3) Обрежем очень большие PR
+          # 3) ограничим размер диффа
           MAX_CHARS=120_000
           diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
-          # 4) Промпт под UIKit + SwiftUI + URLSession
+          # 4) промпт (РУССКИЙ вывод)
           system_prompt = """You are a senior iOS code reviewer.
+          ALL OUTPUT MUST BE IN RUSSIAN (summary and all inline comments).
+
           Project styles: UIKit and SwiftUI (code-only UI, no storyboards/xibs). Networking via URLSession (async/await), MVVM/Services.
-          Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary.
+          Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary in Russian.
 
           Focus:
-          • UIKit: constraints in loadView/viewDidLoad (not viewDidLayoutSubviews); [weak self]; main-thread UI; CALayer/CAGradientLayer perf; accessibility.
-          • SwiftUI: correct @State/@StateObject/@ObservedObject/@EnvironmentObject; avoid heavy logic in View; cancel Task on disappear; no UI off main.
-          • URLSession: async/await; timeouts; waitsForConnectivity; retry/backoff; safe Decodable; no secrets in logs; DI for tests.
-          • General: localization (no hard-coded user strings), safe error handling, performance, style consistency (Swift), SPM pinning.
+          • UIKit: не ставить констрейнты в viewDidLayoutSubviews; использовать loadView/viewDidLoad; [weak self] в замыканиях; UI только на main; производительность CALayer/CAGradientLayer; доступность (accessibility).
+          • SwiftUI: корректное использование @State/@StateObject/@ObservedObject/@EnvironmentObject; избегать тяжёлой логики во View; отмена Task при disappear; без UI не на main.
+          • URLSession: async/await; таймауты; waitsForConnectivity; retry/backoff; безопасный Decodable; без логирования секретов; DI для тестов.
+          • General: локализация (нет жёстко захардкоженных пользовательских строк), безопасная обработка ошибок, производительность, единый стиль Swift, фиксация версий SPM.
 
-          Return STRICT JSON ONLY:
+          Return STRICT JSON ONLY (in Russian):
           {
-            "summary": "short bullet list in markdown",
+            "summary": "краткий список пунктов в markdown на русском",
             "comments": [
-              { "path": "path/to/file.swift", "line": 123, "body": "actionable suggestion in markdown" }
+              { "path": "path/to/file.swift", "line": 123, "body": "конкретное предложение на русском" }
             ]
           }
           Paths MUST match +++ b/<path> in diff. Lines MUST be added lines only. No prose outside JSON."""
@@ -137,7 +139,7 @@ jobs:
                   {"role":"user","content":   user_prompt}
               ],
               "max_tokens": 2000,
-              "response_format": {"type": "json_object"}  # требуем чистый JSON
+              "response_format": {"type": "json_object"}  # строго JSON
           }
 
           headers={"Content-Type":"application/json"}
@@ -147,7 +149,7 @@ jobs:
               else:
                   headers[AI_HDR]=AI_KEY
 
-          # 5) Вызов AI и устойчивое извлечение контента (content / reasoning_content / text / output_text)
+          # 5) вызов AI + устойчивое извлечение контента
           try:
               resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
               status = resp.status_code
@@ -178,12 +180,10 @@ jobs:
           def extract_json(s):
               s = "" if s is None else (s if isinstance(s,str) else str(s))
               s = s.strip()
-              # попробуем напрямую как JSON:
               try:
-                  return json.loads(s)
+                  return json.loads(s)  # уже JSON?
               except Exception:
                   pass
-              # иначе вырежем внешний {...}
               try:
                   i = s.find('{'); j = s.rfind('}')
                   return json.loads(s[i:j+1]) if i!=-1 and j!=-1 else {"summary": s[:2000], "comments": []}
@@ -195,7 +195,7 @@ jobs:
           comments = result.get("comments",[])
           if not isinstance(comments,list): comments=[]
 
-          # 6) Валидация: оставляем комментарии только на реально добавленные строки
+          # 6) фильтруем только действительно добавленные строки
           added_map={}
           for f in files:
               if not f["path"]: continue
@@ -208,7 +208,7 @@ jobs:
               if path in added_map and isinstance(line,int) and line in added_map[path] and body:
                   filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
 
-          # 7) Публикуем review с инлайнами (или fallback — summary)
+          # 7) публикуем review (или fallback — summary в issue comments), без лишних \n\n
           session = requests.Session()
           session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
 
@@ -216,12 +216,12 @@ jobs:
           issues_url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
 
           if filtered:
-              body={"event":"COMMENT","body":summary or "AI Review","comments":filtered[:50]}
+              body={"event":"COMMENT","body":summary, "comments":filtered[:50]}
               r = session.post(review_url, json=body, timeout=60)
               if r.status_code >= 300:
-                  session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+                  session.post(issues_url, json={"body": f"**AI Review**\n{summary}"}, timeout=60)
           else:
-              session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+              session.post(issues_url, json={"body": f"**AI Review**\n{summary}"}, timeout=60)
 
           print("AI inline review done.")
           PY
