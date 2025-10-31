@@ -1,173 +1,208 @@
-- name: Run AI Inline Review (inline script)
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    REPO_FULL:     ${{ github.repository }}
-    PR_NUMBER:     ${{ github.event.pull_request.number }}
-    BASE_SHA:      ${{ github.event.pull_request.base.sha }}
-    HEAD_SHA:      ${{ github.event.pull_request.head.sha }}
-    AI_API_URL:    ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
-    AI_API_KEY:    ${{ secrets.AI_API_KEY }}
-    AI_API_HDR:    ${{ vars.AI_API_HDR || 'Authorization' }}
-    AI_API_MODEL:  "openai/gpt-oss-120b"
-  run:
-    python - << 'PY'
-    import os, sys, subprocess, json, requests
+# .github/workflows/ai-inline-review.yml
+name: AI Inline Review (custom endpoint, OpenAI-OSS 120B)
 
-    REPO      = os.environ["REPO_FULL"]
-    PR_NUMBER = os.environ["PR_NUMBER"]
-    BASE      = os.environ["BASE_SHA"]
-    HEAD      = os.environ["HEAD_SHA"]
-    GH_TOKEN  = os.environ["GITHUB_TOKEN"]
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
 
-    AI_URL    = os.getenv("AI_API_URL","").strip()
-    AI_KEY    = os.getenv("AI_API_KEY","").strip()
-    AI_HDR    = os.getenv("AI_API_HDR","Authorization").strip()
-    AI_MODEL  = os.getenv("AI_API_MODEL","openai/gpt-oss-120b").strip()
+permissions:
+  contents: read
+  pull-requests: write
 
-    def run(cmd):
-        return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
+jobs:
+  review:
+    runs-on: ubuntu-latest
 
-    try:
-        diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
-    except subprocess.CalledProcessError as e:
-        print("::error::git diff failed:", e.output)
-        sys.exit(1)
+    steps:
+      - name: Checkout base repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    if not diff.strip():
-        print("::notice::Empty diff. Nothing to review.")
-        sys.exit(0)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    # --- parse added lines (same as before) ---
-    files=[]; current=None; new_line=None
-    for line in diff.splitlines():
-        if line.startswith("diff --git "):
-            current={"path":None,"hunks":[]}; files.append(current); new_line=None
-        elif line.startswith("+++ b/"):
-            if current: current["path"]=line[len("+++ b/"):].strip()
-        elif line.startswith("@@"):
-            try:
-                marker=line.split("@@")[1].strip()
-                plus=[p for p in marker.split() if p.startswith('+')][0][1:]
-                new_line=int(plus.split(',')[0]) if ',' in plus else int(plus)
-                current["hunks"].append({"start":new_line,"lines":[]})
-            except Exception: pass
-        else:
-            if current and current["hunks"]:
-                h=current["hunks"][-1]
-                if line.startswith('+') and not line.startswith('+++'):
-                    h["lines"].append({"line":new_line,"text":line[1:]}); new_line+=1
-                elif line.startswith('-') and not line.startswith('---'):
-                    pass
-                else:
-                    new_line+=1
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
-    MAX_CHARS=120_000
-    diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
+      - name: Check AI_API_KEY presence
+        run: |
+          if [ -z "${{ secrets.AI_API_KEY }}" ]; then
+            echo "::error::AI_API_KEY is empty. Add it in Settings → Secrets → Actions."
+            exit 1
+          fi
 
-    system_prompt = """You are a senior iOS code reviewer.
-    Project styles: UIKit + SwiftUI, code-only UI (no storyboards/xibs). Networking via URLSession (async/await).
-    Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary.
+      - name: Run AI Inline Review (inline script)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_FULL:     ${{ github.repository }}
+          PR_NUMBER:     ${{ github.event.pull_request.number }}
+          BASE_SHA:      ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA:      ${{ github.event.pull_request.head.sha }}
+          AI_API_URL:    ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
+          AI_API_KEY:    ${{ secrets.AI_API_KEY }}
+          AI_API_HDR:    ${{ vars.AI_API_HDR || 'Authorization' }}   # или 'x-api-key'
+          AI_API_MODEL:  openai/gpt-oss-120b
+        run: |
+          python - << 'PY'
+          import os, sys, subprocess, json, requests
 
-    Focus:
-    • UIKit: constraints in loadView/viewDidLoad (not viewDidLayoutSubviews); [weak self]; main-thread UI; CALayer perf; accessibility.
-    • SwiftUI: correct @State/@StateObject/@ObservedObject/@EnvironmentObject; cancel Task on disappear; avoid heavy logic in View.
-    • URLSession: async/await; timeouts; waitsForConnectivity; retry/backoff; safe Decodable; no secrets in logs; DI for tests.
-    • General: localization (no hard-coded user-facing strings), error handling surfaced to user, performance, style consistency, SPM pinning.
+          REPO      = os.environ["REPO_FULL"]
+          PR_NUMBER = os.environ["PR_NUMBER"]
+          BASE      = os.environ["BASE_SHA"]
+          HEAD      = os.environ["HEAD_SHA"]
+          GH_TOKEN  = os.environ["GITHUB_TOKEN"]
 
-    Return STRICT JSON only:
-    {
-      "summary": "short bullet list in markdown",
-      "comments": [ { "path": "path/to/file.swift", "line": 123, "body": "actionable suggestion in markdown" } ]
-    }
-    Paths MUST match +++ b/<path> in diff. Lines MUST refer to added lines only. No prose outside JSON."""
+          AI_URL    = os.getenv("AI_API_URL","").strip()
+          AI_KEY    = os.getenv("AI_API_KEY","").strip()
+          AI_HDR    = os.getenv("AI_API_HDR","Authorization").strip()
+          AI_MODEL  = os.getenv("AI_API_MODEL","openai/gpt-oss-120b").strip()
 
-    user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
+          def run(cmd):
+              return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
 
-    payload = {
-      "model": AI_MODEL,
-      "temperature": 0.15,
-      "messages": [
-        {"role":"system","content": system_prompt},
-        {"role":"user","content":   user_prompt}
-      ],
-      "max_tokens": 2000
-    }
+          try:
+              diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
+          except subprocess.CalledProcessError as e:
+              print("::error::git diff failed:", e.output)
+              sys.exit(1)
 
-    headers={"Content-Type":"application/json"}
-    if AI_KEY:
-        if AI_HDR.lower().startswith("authorization"):
-            headers["Authorization"]=f"Bearer {AI_KEY}"
-        else:
-            headers[AI_HDR]=AI_KEY
+          if not diff.strip():
+              print("::notice::Empty diff. Nothing to review.")
+              sys.exit(0)
 
-    # --- call AI endpoint (robust content extraction) ---
-    try:
-        resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
-        status = resp.status_code
-        data = resp.json() if status<400 else {}
-    except Exception as e:
-        status = 0; data = {}
+          files=[]; current=None; new_line=None
+          for line in diff.splitlines():
+              if line.startswith("diff --git "):
+                  current={"path":None,"hunks":[]}; files.append(current); new_line=None
+              elif line.startswith("+++ b/"):
+                  if current: current["path"]=line[len("+++ b/"):].strip()
+              elif line.startswith("@@"):
+                  try:
+                      marker=line.split("@@")[1].strip()
+                      plus=[p for p in marker.split() if p.startswith('+')][0][1:]
+                      new_line=int(plus.split(',')[0]) if ',' in plus else int(plus)
+                      current["hunks"].append({"start":new_line,"lines":[]})
+                  except Exception:
+                      pass
+              else:
+                  if current and current["hunks"]:
+                      h=current["hunks"][-1]
+                      if line.startswith('+') and not line.startswith('+++'):
+                          h["lines"].append({"line":new_line,"text":line[1:]}); new_line+=1
+                      elif line.startswith('-') and not line.startswith('---'):
+                          pass
+                      else:
+                          new_line+=1
 
-    # Try multiple known fields
-    content = None
-    try:
-        content = data.get("choices",[{}])[0].get("message",{}).get("content")
-    except Exception:
-        pass
-    if not content:
-        content = data.get("choices",[{}])[0].get("text")
-    if not content:
-        content = data.get("output_text")
-    if content is None:
-        # last resort: compact preview of raw body for debugging
-        preview = ""
-        try:
-            preview = json.dumps(data)[:600]
-        except Exception:
-            preview = str(data)[:600]
-        content = json.dumps({"summary": f"AI endpoint returned no content (status={status}). Raw preview: {preview}", "comments": []})
+          MAX_CHARS=120_000
+          diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
-    # Safe JSON extraction
-    def extract_json(s):
-        s = "" if s is None else (s if isinstance(s,str) else str(s))
-        s = s.strip()
-        try:
-            i = s.find('{'); j = s.rfind('}')
-            return json.loads(s[i:j+1]) if i!=-1 and j!=-1 else {"summary": s[:2000], "comments": []}
-        except Exception:
-            return {"summary": s[:2000], "comments": []}
+          system_prompt = """You are a senior iOS code reviewer.
+          Project styles:
+          - UIKit and SwiftUI coexist. UI is code-only (no storyboards/xibs).
+          - Networking via URLSession (async/await preferred), MVVM/Services.
+          Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary.
 
-    result   = extract_json(content)
-    summary  = result.get("summary","AI review")
-    comments = result.get("comments",[])
-    if not isinstance(comments,list): comments=[]
+          Focus:
+          • UIKit: constraints in loadView/viewDidLoad (not viewDidLayoutSubviews); [weak self]; main-thread UI; CALayer perf; accessibility.
+          • SwiftUI: correct @State/@StateObject/@ObservedObject/@EnvironmentObject; cancel Task on disappear; avoid heavy logic in View.
+          • URLSession: async/await; timeouts; waitsForConnectivity; retry/backoff; safe Decodable; no secrets in logs; DI for tests.
+          • General: localization (no hard-coded user strings), error handling surfaced to user, performance, style consistency, SPM pinning.
 
-    # Validate against actually added lines
-    added_map = {}
-    for f in files:
-        if not f["path"]: continue
-        added = {ln["line"] for h in f["hunks"] for ln in h["lines"]}
-        added_map[f["path"]] = added
+          Return STRICT JSON ONLY:
+          {
+            "summary": "short bullet list in markdown",
+            "comments": [
+              { "path": "path/to/file.swift", "line": 123, "body": "actionable suggestion in markdown" }
+            ]
+          }
+          Paths MUST match +++ b/<path> in diff. Lines MUST be added lines only. No prose outside JSON."""
+          
+          user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
 
-    filtered=[]
-    for c in comments:
-        path=c.get("path"); line=c.get("line"); body=(c.get("body") or "").strip()
-        if path in added_map and isinstance(line,int) and line in added_map[path] and body:
-            filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
+          payload = {
+              "model": AI_MODEL,
+              "temperature": 0.15,
+              "messages": [
+                  {"role":"system","content": system_prompt},
+                  {"role":"user","content":   user_prompt}
+              ],
+              "max_tokens": 2000
+          }
 
-    session = requests.Session()
-    session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
+          headers={"Content-Type":"application/json"}
+          if AI_KEY:
+              if AI_HDR.lower().startswith("authorization"):
+                  headers["Authorization"]=f"Bearer {AI_KEY}"
+              else:
+                  headers[AI_HDR]=AI_KEY
 
-    review_url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
-    issues_url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
+          try:
+              resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
+              status = resp.status_code
+              data = resp.json() if status < 400 else {}
+          except Exception as e:
+              status = 0; data = {}
 
-    if filtered:
-        body={"event":"COMMENT","body":summary or "AI Review","comments":filtered[:50]}
-        r = session.post(review_url, json=body, timeout=60)
-        if r.status_code >= 300:
-            session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
-    else:
-        session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+          content = None
+          try:
+              content = data.get("choices",[{}])[0].get("message",{}).get("content")
+          except Exception:
+              pass
+          if not content:
+              content = data.get("choices",[{}])[0].get("text")
+          if not content:
+              content = data.get("output_text")
+          if content is None:
+              preview = ""
+              try: preview = json.dumps(data)[:600]
+              except Exception: preview = str(data)[:600]
+              content = json.dumps({"summary": f"AI endpoint returned no content (status={status}). Raw preview: {preview}", "comments": []})
 
-    print("AI inline review done.")
-    PY
+          def extract_json(s):
+              s = "" if s is None else (s if isinstance(s,str) else str(s))
+              s = s.strip()
+              try:
+                  i = s.find('{'); j = s.rfind('}')
+                  return json.loads(s[i:j+1]) if i!=-1 and j!=-1 else {"summary": s[:2000], "comments": []}
+              except Exception:
+                  return {"summary": s[:2000], "comments": []}
+
+          result   = extract_json(content)
+          summary  = result.get("summary","AI review")
+          comments = result.get("comments",[])
+          if not isinstance(comments,list): comments=[]
+
+          added_map={}
+          for f in files:
+              if not f["path"]: continue
+              added = {ln["line"] for h in f["hunks"] for ln in h["lines"]}
+              added_map[f["path"]] = added
+
+          filtered=[]
+          for c in comments:
+              path=c.get("path"); line=c.get("line"); body=(c.get("body") or "").strip()
+              if path in added_map and isinstance(line,int) and line in added_map[path] and body:
+                  filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
+
+          session = requests.Session()
+          session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
+
+          review_url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
+          issues_url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
+
+          if filtered:
+              body={"event":"COMMENT","body":summary or "AI Review","comments":filtered[:50]}
+              r = session.post(review_url, json=body, timeout=60)
+              if r.status_code >= 300:
+                  session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+          else:
+              session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+
+          print("AI inline review done.")
+          PY
