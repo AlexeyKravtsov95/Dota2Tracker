@@ -8,6 +8,10 @@
 import UIKit
 
 final class WelcomeViewController: UIViewController {
+
+    let networkService = NetworkService()
+    var players: [Player] = []
+
     private lazy var bg: GradientBackgrounView = {
         let background = GradientBackgrounView()
         background.translatesAutoresizingMaskIntoConstraints = false
@@ -71,7 +75,7 @@ final class WelcomeViewController: UIViewController {
         button.addAction(UIAction {
             [weak self] _ in
             self?.textField.resignFirstResponder()
-            self?.goToFirstTab()
+            self?.goPlayersList()
         }, for: .touchUpInside)
         return button
     }()
@@ -108,6 +112,8 @@ final class WelcomeViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        navigationItem.backBarButtonItem = UIBarButtonItem(title: "", style: .plain, target: nil, action: nil)
+        navigationItem.backBarButtonItem?.tintColor = .white
     }
 
     override func viewDidLayoutSubviews() {
@@ -139,13 +145,18 @@ final class WelcomeViewController: UIViewController {
         ])
     }
 
-    private func goToFirstTab() {
-        let tabBarController = TabBarController()
-        if let window = view.window?.windowScene?.windows.first {
-            window.rootViewController = tabBarController
-            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
-                window.rootViewController = tabBarController
-            }, completion: nil)
+    private func goPlayersList() {
+        guard let nickname = textField.text, !nickname.isEmpty else { return }
+//        self.searchButton.isUserInteractionEnabled = false
+
+        networkService.sendRequest(name: nickname) { players in
+            DispatchQueue.main.async {
+                self.players = players
+                self.textField.text = nil
+                let playersVC = OverviewViewController()
+                playersVC.players = self.players
+                self.navigationController?.pushViewController(playersVC, animated: true)
+            }
         }
     }
 }

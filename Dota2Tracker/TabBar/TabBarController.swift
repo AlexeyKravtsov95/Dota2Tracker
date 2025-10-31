@@ -1,12 +1,12 @@
 import UIKit
 
-final class TabBarController: UITabBarController {
+final class MainTabBarController: UITabBarController {
     private let selected = Palette.TabBar.selectedItemColor
     private let nonSelected = Palette.TabBar.nonSelectedItemColor
     private let main = Palette.TabBar.mainColor
 
     //App Controllers
-    let overviewNavBarController = UINavigationController(rootViewController: OverviewViewController())
+    let playerNavBarController = UINavigationController(rootViewController: OverviewViewController())
     let liveNavBarController = UINavigationController(rootViewController: LiveViewController())
     let ladderNavBarController = UINavigationController(rootViewController:LadderViewController())
     let analyticsNavBarController = UINavigationController(rootViewController:AnalyticsViewController())
@@ -63,13 +63,13 @@ final class TabBarController: UITabBarController {
         view.addSubview(tabBarSecondView)
         tabBar.isHidden = true
 
-        overviewNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
+        playerNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
 
         liveNavBarController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
         ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
         analyticsNavBarController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
 
-        setViewControllers([overviewNavBarController,
+        setViewControllers([playerNavBarController,
                             liveNavBarController,
                             ladderNavBarController,
                             analyticsNavBarController], animated: false)
