@@ -1,5 +1,5 @@
 # .github/workflows/ai-inline-review.yml
-name: AI Inline Review (custom endpoint, OpenAI-OSS 120B, RU)
+name: AI Inline Review (custom endpoint, OpenAI-OSS 120B, RU & fenced code)
 
 on:
   pull_request_target:
@@ -107,27 +107,39 @@ jobs:
           MAX_CHARS=120_000
           diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
-          # 4) промпт (РУССКИЙ вывод)
+          # 4) промпт (РУССКИЙ вывод + правила рендеринга fenced-блоков)
           system_prompt = """You are a senior iOS code reviewer.
           ALL OUTPUT MUST BE IN RUSSIAN (summary and all inline comments).
 
-          Project styles: UIKit and SwiftUI (code-only UI, no storyboards/xibs). Networking via URLSession (async/await), MVVM/Services.
-          Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines, plus a short bulleted summary in Russian.
+          Правила рендеринга в GitHub:
+          - Любой фрагмент кода ОБЯЗАТЕЛЬНО в fenced-блоке без лишних пустых строк:
+            • Для Swift: ```swift … ```
+            • Для диффов: ```diff … ```
+            • Для точечной правки строки/фрагмента используйте GitHub Suggestions:
+              ```suggestion
+              // новый код целиком, без префиксов '+'/'-'
+              ```
+          - НИКОГДА не выводите код как маркеры списка. Строки, начинающиеся с '+' или '-', допустимы ТОЛЬКО внутри ```diff.
+          - Перед и после fenced-блока — не вставлять лишние пустые строки.
+          - В summary используйте буллеты, но без непосредственного кода (код — отдельно в fenced-блоках в комментариях).
 
-          Focus:
-          • UIKit: не ставить констрейнты в viewDidLayoutSubviews; использовать loadView/viewDidLoad; [weak self] в замыканиях; UI только на main; производительность CALayer/CAGradientLayer; доступность (accessibility).
-          • SwiftUI: корректное использование @State/@StateObject/@ObservedObject/@EnvironmentObject; избегать тяжёлой логики во View; отмена Task при disappear; без UI не на main.
+          Контекст: UIKit и SwiftUI (только кодовая верстка, без storyboards/xibs). Сеть — URLSession (async/await), MVVM/Services.
+          Задача: по unified diff сделать ИНЛАЙН-комментарии ТОЛЬКО на ДОБАВЛЕННЫЕ строки + краткий summary на русском.
+
+          Фокус:
+          • UIKit: не ставить констрейнты в viewDidLayoutSubviews; использовать loadView/viewDidLoad; [weak self] в замыканиях; UI только на main; производительность CALayer/CAGradientLayer; accessibility.
+          • SwiftUI: корректное @State/@StateObject/@ObservedObject/@EnvironmentObject; избегать тяжёлой логики во View; отмена Task при disappear; без UI не на main.
           • URLSession: async/await; таймауты; waitsForConnectivity; retry/backoff; безопасный Decodable; без логирования секретов; DI для тестов.
-          • General: локализация (нет жёстко захардкоженных пользовательских строк), безопасная обработка ошибок, производительность, единый стиль Swift, фиксация версий SPM.
+          • Общее: локализация (нет захардкоженных user-facing строк), безопасная обработка ошибок, производительность, единый стиль Swift, фиксация версий SPM.
 
-          Return STRICT JSON ONLY (in Russian):
+          Верните СТРОГИЙ JSON (на русском):
           {
             "summary": "краткий список пунктов в markdown на русском",
             "comments": [
-              { "path": "path/to/file.swift", "line": 123, "body": "конкретное предложение на русском" }
+              { "path": "path/to/file.swift", "line": 123, "body": "текст комментария в markdown; если предлагаете правку — используйте fenced-блок ```suggestion ... ```" }
             ]
           }
-          Paths MUST match +++ b/<path> in diff. Lines MUST be added lines only. No prose outside JSON."""
+          Paths MUST match +++ b/<path> в diff. Lines MUST be added lines only. No prose outside JSON."""
 
           user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
 
@@ -208,7 +220,7 @@ jobs:
               if path in added_map and isinstance(line,int) and line in added_map[path] and body:
                   filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
 
-          # 7) публикуем review (или fallback — summary в issue comments), без лишних \n\n
+          # 7) публикуем review (или fallback — summary), без лишних \n\n
           session = requests.Session()
           session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
 
