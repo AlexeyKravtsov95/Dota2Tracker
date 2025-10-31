@@ -2,8 +2,7 @@ import UIKit
 
 final class OverviewViewController: UIViewController {
 
-    var data = Players.mockData()
-    var customNavBar = CustomNavBar()
+    var players: [Player] = []
 
     private lazy var bg: GradientBackgrounView = {
         $0.translatesAutoresizingMaskIntoConstraints = false
@@ -19,6 +18,14 @@ final class OverviewViewController: UIViewController {
         $0.translatesAutoresizingMaskIntoConstraints = false
         return $0
     }(UITableView(frame: .zero, style: .insetGrouped))
+
+    private lazy var titleLabel: UILabel = {
+        $0.text = "Игроки".uppercased()
+        $0.textColor = .white
+        $0.font = .systemFont(ofSize: 24, weight: .regular)
+        $0.textAlignment = .center
+        return $0
+    }(UILabel())
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,19 +46,9 @@ final class OverviewViewController: UIViewController {
         tableView.isScrollEnabled = contentHeight > screenHeight
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        navigationController?.setNavigationBarHidden(true, animated: animated)
-    }
-
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        navigationController?.setNavigationBarHidden(false, animated: animated)
-    }
-
     private func setupView() {
+        self.navigationItem.titleView = titleLabel as UILabel
         view.addSubview(bg)
-        view.addSubview(customNavBar)
         view.addSubview(tableView)
     }
 
@@ -62,12 +59,7 @@ final class OverviewViewController: UIViewController {
             bg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            customNavBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            customNavBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            customNavBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            customNavBar.heightAnchor.constraint(equalToConstant: 50),
-
-            tableView.topAnchor.constraint(equalTo: customNavBar.bottomAnchor),
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
@@ -77,7 +69,7 @@ final class OverviewViewController: UIViewController {
 
 extension OverviewViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        data.count
+        players.count
     }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -85,8 +77,8 @@ extension OverviewViewController: UITableViewDataSource, UITableViewDelegate {
             fatalError("Ячейка не найдена")
         }
 
-        let item = data[indexPath.row]
-        cell.setupCell(data: item)
+        let player = players[indexPath.row]
+        cell.setupCell(data: player)
         cell.selectionStyle = .none
         cell.backgroundColor = .clear
         cell.dropShadow(opacity: 0.3, radius: 0.5)
@@ -94,9 +86,13 @@ extension OverviewViewController: UITableViewDataSource, UITableViewDelegate {
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-            let detailVC = DetailViewController()
-            let selectedItem = data[indexPath.row]
-            detailVC.data = selectedItem
-            navigationController?.pushViewController(detailVC, animated: true)
+        let tabBarController = MainTabBarController()
+
+        if let window = view.window?.windowScene?.windows.first {
+            window.rootViewController = tabBarController
+            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
+                window.rootViewController = tabBarController
+            }, completion: nil)
         }
+    }
 }

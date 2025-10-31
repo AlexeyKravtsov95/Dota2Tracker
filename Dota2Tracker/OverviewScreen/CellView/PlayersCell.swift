@@ -59,10 +59,26 @@ final class PlayersCell: UITableViewCell {
         avatarImageView.layer.cornerRadius = avatarImageView.bounds.width / 2
     }
 
-    func setupCell(data: Players) {
-        cellNameLabel.text = data.name
-        cellStatusLabel.text = data.statusSteam
-        avatarImageView.image = UIImage(named: data.avatar)
+    func setupCell(data: Player) {
+        cellNameLabel.text = data.personaName
+
+        if let url = URL(string: data.avatarFull) {
+            URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+                guard let self = self, error == nil, let imageData = data else {
+                    print(error?.localizedDescription ?? "Unknown error")
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.avatarImageView.image = UIImage(data: imageData)
+                }
+            }.resume()
+        }
+
+        if data.isOnline {
+            cellStatusLabel.text = "ONLINE"
+        } else {
+            cellStatusLabel.text = "OFFLINE"
+        }
 
         addSubview(cellView)
         cellView.addSubview(stackView)

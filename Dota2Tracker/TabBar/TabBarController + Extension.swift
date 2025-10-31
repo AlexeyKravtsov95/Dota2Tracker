@@ -1,6 +1,6 @@
 import UIKit
 
-extension TabBarController {
+extension MainTabBarController {
 
     // MARK: - Создание кнопки
     func getButton(icon: String, tag: Int, action: UIAction, tintColor: UIColor = Palette.TabBar.nonSelectedItemColor) -> UIButton {
