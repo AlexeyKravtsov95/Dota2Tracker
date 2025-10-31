@@ -1,7 +1,7 @@
-# .github/workflows/ai-inline-review.yml
-name: AI Inline Review (custom endpoint)
+name: AI Inline Review (custom endpoint, OpenAI-OSS 120B)
 
 on:
+  # Если у тебя бывают PR из форков, оставь pull_request_target — он даст права писать комменты.
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -12,6 +12,7 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout base repo
         uses: actions/checkout@v4
@@ -21,23 +22,36 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install requests
 
+      # (опционально) Быстрая проверка, что ключ действительно доступен этому job
+      - name: Check AI_API_KEY presence
+        run: |
+          if [ -z "${{ secrets.AI_API_KEY }}" ]; then
+            echo "::error::AI_API_KEY is empty. Add it in Settings → Secrets → Actions (or bind an environment)."
+            exit 1
+          fi
+
       - name: Run AI Inline Review (inline script)
         env:
+          # GitHub
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_FULL:     ${{ github.repository }}
           PR_NUMBER:     ${{ github.event.pull_request.number }}
           BASE_SHA:      ${{ github.event.pull_request.base.sha }}
           HEAD_SHA:      ${{ github.event.pull_request.head.sha }}
-          AI_API_URL:    ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
-          AI_API_KEY:    ${{ secrets.AI_API_KEY }}
-          AI_API_MODEL:  ${{ vars.AI_API_MODEL || 'openai/gpt-oss-120b' }}
+
+          # Твой AI сервис
+          AI_API_URL:   ${{ vars.AI_API_URL || 'https://api.intelligence.io.solutions/api/v1/chat/completions' }}
+          AI_API_KEY:   ${{ secrets.AI_API_KEY }}         # добавь в Secrets
+          AI_API_HDR:   ${{ vars.AI_API_HDR || 'Authorization' }} # 'Authorization' или 'x-api-key'
+          AI_API_MODEL: "openai/gpt-oss-120b"             # фиксируем openai
+
         run: |
           python - << 'PY'
           import os, sys, subprocess, json, requests
@@ -48,13 +62,15 @@ jobs:
           HEAD      = os.environ["HEAD_SHA"]
           GH_TOKEN  = os.environ["GITHUB_TOKEN"]
 
-          AI_URL    = os.getenv("AI_API_URL", "https://api.intelligence.io.solutions/api/v1/chat/completions").strip()
+          AI_URL    = os.getenv("AI_API_URL", "").strip()
           AI_KEY    = os.getenv("AI_API_KEY", "").strip()
+          AI_HDR    = os.getenv("AI_API_HDR", "Authorization").strip()
           AI_MODEL  = os.getenv("AI_API_MODEL", "openai/gpt-oss-120b").strip()
 
           def run(cmd):
               return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
 
+          # 1) Собираем дифф между base и head с нулевым контекстом (для точной нумерации новых строк)
           try:
               diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
           except subprocess.CalledProcessError as e:
@@ -65,17 +81,21 @@ jobs:
               print("::notice::Empty diff. Nothing to review.")
               sys.exit(0)
 
-          # parse added lines
+          # 2) Парсим добавленные строки по файлам
           files = []
           current = None
           new_line = None
+
           for line in diff.splitlines():
               if line.startswith("diff --git "):
                   current = {"path": None, "hunks": []}
-                  files.append(current); new_line = None
+                  files.append(current)
+                  new_line = None
               elif line.startswith("+++ b/"):
-                  if current: current["path"] = line[len("+++ b/"):].strip()
+                  if current:
+                      current["path"] = line[len("+++ b/"):].strip()
               elif line.startswith("@@"):
+                  # @@ -oldStart,oldLen +newStart,newLen @@
                   try:
                       marker = line.split("@@")[1].strip()
                       plus = [p for p in marker.split() if p.startswith('+')][0][1:]
@@ -87,51 +107,72 @@ jobs:
                   if current and current["hunks"]:
                       h = current["hunks"][-1]
                       if line.startswith('+') and not line.startswith('+++'):
-                          h["lines"].append({"line": new_line, "text": line[1:]}); new_line += 1
+                          h["lines"].append({"line": new_line, "text": line[1:]})
+                          new_line += 1
                       elif line.startswith('-') and not line.startswith('---'):
+                          # удалённые строки — не увеличиваем
                           pass
                       else:
+                          # контекст — линия существует в новом файле
                           new_line += 1
 
+          # Ограничение размера диффа
           MAX_CHARS = 120_000
           diff_trimmed = diff if len(diff) <= MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
-          system_prompt = """You are a senior iOS reviewer for a UIKit-only Swift project (no storyboards).
-          Review the PR diff and produce inline comments ONLY on newly-added lines.
-          Focus on: retain cycles ([weak self]), main-thread UI, Auto Layout misuse (constraints in viewDidLayoutSubviews),
-          accessibility labels/hints, error handling, secrets in repo, background networking, localization, Core Animation performance.
-          Return STRICT JSON:
+          # 3) Промпт под UIKit + SwiftUI + URLSession (и наши правила)
+          system_prompt = """You are a senior iOS code reviewer.
+          Project styles:
+          - UIKit and SwiftUI coexist. UI is code-based (no storyboards/xibs).
+          - Networking via URLSession (async/await preferred), clean architecture (MVVM/Services).
+          Your task:
+          - Review the PR unified diff and produce INLINE comments ONLY on newly ADDED lines (not removed/context).
+          - Also provide a short bulleted summary.
+
+          Focus areas:
+          • UIKit: avoid constraints in viewDidLayoutSubviews; set them in viewDidLoad or loadView; retain cycles in closures ([weak self]); main-thread UI only; reusable views; CALayer/CAGradientLayer performance (no heavy work in layoutSubviews); accessibility (labels/hints).
+          • SwiftUI: correct use of @State/@StateObject/@ObservedObject/@EnvironmentObject; avoid heavy logic in View; use ObservableObject for state; cancellation of Task on disappear; no UI work off main; avoid infinite .onReceive; environment values usage.
+          • URLSession: async/await; timeouts; waitsForConnectivity; retry/backoff; safe Decodable (key strategies); no logging of secrets/tokens; dependency injection for testability (URLSessionProtocol/HTTPClient).
+          • General: localization (no hard-coded user-facing strings), secrets/config in repo, error handling surfaced to user safely, performance issues, code style consistency (Swift), SPM pinning.
+
+          Return STRICT JSON only:
           {
-            "summary": "short bullet summary in markdown",
+            "summary": "short bullet list in markdown",
             "comments": [
-              {"path": "path/to/file.swift", "line": 123, "body": "actionable suggestion in markdown"}
+              { "path": "path/to/file.swift", "line": 123, "body": "actionable suggestion in markdown" }
             ]
           }
-          Paths must match +++ b/<path> in diff. Lines must refer to added lines only.
-          """
+          Paths MUST match +++ b/<path> in diff. Lines MUST refer to added lines only. No prose outside JSON."""
 
           user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
 
           payload = {
               "model": AI_MODEL,
-              "temperature": 0.2,
+              "temperature": 0.15,
               "messages": [
                   {"role": "system", "content": system_prompt},
                   {"role": "user",   "content": user_prompt}
-              ]
+              ],
+              "max_tokens": 2000
           }
 
           headers = {"Content-Type": "application/json"}
-          if AI_KEY: headers["Authorization"] = f"Bearer {AI_KEY}"
+          if AI_KEY:
+              # гибкий заголовок: Authorization: Bearer <key> ИЛИ x-api-key: <key>
+              if AI_HDR.lower().startswith("authorization"):
+                  headers["Authorization"] = f"Bearer {AI_KEY}"
+              else:
+                  headers[AI_HDR] = AI_KEY
 
           try:
-              r = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
-              r.raise_for_status()
-              data = r.json()
+              resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
+              resp.raise_for_status()
+              data = resp.json()
               content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
           except Exception as e:
               content = json.dumps({"summary": f"AI endpoint error: {e}", "comments": []})
 
+          # 4) Пытаемся извлечь JSON даже если вокруг есть текст
           def extract_json(s: str):
               s = s.strip()
               try:
@@ -143,33 +184,42 @@ jobs:
           result   = extract_json(content)
           summary  = result.get("summary", "AI review")
           comments = result.get("comments", [])
-          if not isinstance(comments, list): comments = []
+          if not isinstance(comments, list):
+              comments = []
 
+          # 5) Валидация: только реально добавленные строки
           added_map = {}
           for f in files:
-              if not f["path"]: continue
+              if not f["path"]:
+                  continue
               added = {ln["line"] for h in f["hunks"] for ln in h["lines"]}
               added_map[f["path"]] = added
 
           filtered = []
           for c in comments:
-              path = c.get("path"); line = c.get("line"); body = (c.get("body") or "").strip()
+              path = c.get("path")
+              line = c.get("line")
+              body = (c.get("body") or "").strip()
               if path in added_map and isinstance(line, int) and line in added_map[path] and body:
                   filtered.append({"path": path, "line": line, "side": "RIGHT", "body": body})
 
-          sess = requests.Session()
-          sess.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
+          # 6) Публикуем как Review с инлайнами (или fallback — summary в issue comments)
+          session = requests.Session()
+          session.headers.update({
+              "Authorization": f"Bearer {GH_TOKEN}",
+              "Accept": "application/vnd.github+json",
+          })
 
           review_url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
           issues_url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
 
           if filtered:
               body = {"event": "COMMENT", "body": summary or "AI Review", "comments": filtered[:50]}
-              resp = sess.post(review_url, json=body, timeout=60)
-              if resp.status_code >= 300:
-                  sess.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+              r = session.post(review_url, json=body, timeout=60)
+              if r.status_code >= 300:
+                  session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
           else:
-              sess.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
+              session.post(issues_url, json={"body": f"**AI Review**\\n\\n{summary}"}, timeout=60)
 
           print("AI inline review done.")
           PY
