@@ -1,4 +1,3 @@
-# .github/workflows/ai-inline-review.yml
 name: AI Inline Review (custom endpoint, OpenAI-OSS 120B, RU & fenced code)
 
 on:
@@ -51,14 +50,13 @@ jobs:
           AI_API_MODEL: openai/gpt-oss-120b
         run: |
           python - << 'PY'
-          import os, sys, subprocess, json, requests
+          import os, sys, subprocess, json, re, requests
 
           REPO      = os.environ["REPO_FULL"]
           PR_NUMBER = os.environ["PR_NUMBER"]
           BASE      = os.environ["BASE_SHA"]
           HEAD      = os.environ["HEAD_SHA"]
           GH_TOKEN  = os.environ["GITHUB_TOKEN"]
-
           AI_URL    = os.getenv("AI_API_URL","").strip()
           AI_KEY    = os.getenv("AI_API_KEY","").strip()
           AI_HDR    = os.getenv("AI_API_HDR","Authorization").strip()
@@ -67,18 +65,17 @@ jobs:
           def run(cmd):
               return subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.STDOUT)
 
-          # 1) unified diff (U=0 — точные номера новых строк)
+          # --- diff с точными новыми строками
           try:
               diff = run(f'git diff --unified=0 --no-color "{BASE}" "{HEAD}"')
           except subprocess.CalledProcessError as e:
               print("::error::git diff failed:", e.output)
               sys.exit(1)
-
           if not diff.strip():
               print("::notice::Empty diff. Nothing to review.")
               sys.exit(0)
 
-          # 2) карта добавленных строк по файлам
+          # Карта добавленных строк по файлам
           files=[]; current=None; new_line=None
           for line in diff.splitlines():
               if line.startswith("diff --git "):
@@ -103,46 +100,28 @@ jobs:
                       else:
                           new_line+=1
 
-          # 3) ограничим размер диффа
+          # Ограничим размер диффа, чтобы не ронять модель
           MAX_CHARS=120_000
           diff_trimmed = diff if len(diff)<=MAX_CHARS else diff[:MAX_CHARS] + "\n\n...[TRIMMED]"
 
-          # 4) промпт (РУССКИЙ вывод + правила рендеринга fenced-блоков)
-          system_prompt = """You are a senior iOS code reviewer.
-          ALL OUTPUT MUST BE IN RUSSIAN (summary and all inline comments).
+          # --- Промпт (РУССКИЙ обязательно)
+          system_prompt = """Ты — строгий сеньор iOS code reviewer.
+          ВСЁ, что ты выводишь (summary и комментарии), ДОЛЖНО быть ТОЛЬКО НА РУССКОМ ЯЗЫКЕ.
+          Рендеринг для GitHub:
+          - Любой код — только в fenced-блоках: ```swift ...```, ```diff ...```, ```suggestion ...```
+          - Без лишних пустых строк до/после fenced-блоков.
+          - Inline-комментарии — только по ДОБАВЛЕННЫМ строкам.
+          Контекст: UIKit/SwiftUI верстка кодом, URLSession async/await, MVVM/Services.
 
-          Правила рендеринга в GitHub:
-          - Любой фрагмент кода ОБЯЗАТЕЛЬНО в fenced-блоке без лишних пустых строк:
-            • Для Swift: ```swift … ```
-            • Для диффов: ```diff … ```
-            • Для точечной правки строки/фрагмента используйте GitHub Suggestions:
-              ```suggestion
-              // новый код целиком, без префиксов '+'/'-'
-              ```
-          - НИКОГДА не выводите код как маркеры списка. Строки, начинающиеся с '+' или '-', допустимы ТОЛЬКО внутри ```diff.
-          - Перед и после fenced-блока — не вставлять лишние пустые строки.
-          - В summary используйте буллеты, но без непосредственного кода (код — отдельно в fenced-блоках в комментариях).
-
-          Контекст: UIKit и SwiftUI (только кодовая верстка, без storyboards/xibs). Сеть — URLSession (async/await), MVVM/Services.
-          Задача: по unified diff сделать ИНЛАЙН-комментарии ТОЛЬКО на ДОБАВЛЕННЫЕ строки + краткий summary на русском.
-
-          Фокус:
-          • UIKit: не ставить констрейнты в viewDidLayoutSubviews; использовать loadView/viewDidLoad; [weak self] в замыканиях; UI только на main; производительность CALayer/CAGradientLayer; accessibility.
-          • SwiftUI: корректное @State/@StateObject/@ObservedObject/@EnvironmentObject; избегать тяжёлой логики во View; отмена Task при disappear; без UI не на main.
-          • URLSession: async/await; таймауты; waitsForConnectivity; retry/backoff; безопасный Decodable; без логирования секретов; DI для тестов.
-          • Общее: локализация (нет захардкоженных user-facing строк), безопасная обработка ошибок, производительность, единый стиль Swift, фиксация версий SPM.
-
-          Верните СТРОГИЙ JSON (на русском):
+          Верни СТРОГИЙ JSON:
           {
-            "summary": "краткий список пунктов в markdown на русском",
+            "summary": "краткий список пунктов в markdown (на русском)",
             "comments": [
-              { "path": "path/to/file.swift", "line": 123, "body": "текст комментария в markdown; если предлагаете правку — используйте fenced-блок ```suggestion ... ```" }
+              { "path": "path/from/+++ b/", "line": 123, "body": "текст на русском; если правка — fenced ```suggestion ... ```" }
             ]
-          }
-          Paths MUST match +++ b/<path> в diff. Lines MUST be added lines only. No prose outside JSON."""
+          }"""
 
           user_prompt = f"<diff>\\n{diff_trimmed}\\n</diff>"
-
           payload = {
               "model": AI_MODEL,
               "temperature": 0.10,
@@ -151,9 +130,8 @@ jobs:
                   {"role":"user","content":   user_prompt}
               ],
               "max_tokens": 2000,
-              "response_format": {"type": "json_object"}  # строго JSON
+              "response_format": {"type": "json_object"}
           }
-
           headers={"Content-Type":"application/json"}
           if AI_KEY:
               if AI_HDR.lower().startswith("authorization"):
@@ -161,53 +139,61 @@ jobs:
               else:
                   headers[AI_HDR]=AI_KEY
 
-          # 5) вызов AI + устойчивое извлечение контента
-          try:
-              resp = requests.post(AI_URL, headers=headers, json=payload, timeout=120)
-              status = resp.status_code
-              data = resp.json() if status < 400 else {}
-          except Exception as e:
-              status = 0; data = {}
+          def call_ai(inp):
+              r = requests.post(AI_URL, headers=headers, json=inp, timeout=120)
+              try: return r.status_code, r.json()
+              except Exception: return r.status_code, {}
 
+          status, data = call_ai(payload)
+          # Извлечь content
           content = None
           try:
               choice0 = (data.get("choices") or [{}])[0]
               msg = choice0.get("message") or {}
-              content = msg.get("content")
-              if not content:
-                  content = msg.get("reasoning_content")
-              if not content:
-                  content = choice0.get("text")
-              if not content:
-                  content = data.get("output_text")
+              content = msg.get("content") or msg.get("reasoning_content") or choice0.get("text") or data.get("output_text")
           except Exception:
               pass
+          if not content:
+              content = json.dumps({"summary":"AI endpoint returned no content.", "comments":[]})
 
-          if content is None:
-              preview = ""
-              try: preview = json.dumps(data)[:600]
-              except Exception: preview = str(data)[:600]
-              content = json.dumps({"summary": f"AI endpoint returned no content field (status={status}). Raw preview: {preview}", "comments": []})
-
+          # Устойчивое извлечение JSON
           def extract_json(s):
-              s = "" if s is None else (s if isinstance(s,str) else str(s))
+              s = s if isinstance(s,str) else str(s)
               s = s.strip()
-              try:
-                  return json.loads(s)  # уже JSON?
-              except Exception:
-                  pass
-              try:
-                  i = s.find('{'); j = s.rfind('}')
-                  return json.loads(s[i:j+1]) if i!=-1 and j!=-1 else {"summary": s[:2000], "comments": []}
-              except Exception:
-                  return {"summary": s[:2000], "comments": []}
+              try: return json.loads(s)
+              except: pass
+              i=s.find('{'); j=s.rfind('}')
+              if i!=-1 and j!=-1:
+                  try: return json.loads(s[i:j+1])
+                  except: pass
+              return {"summary": s[:2000], "comments":[]}
 
-          result   = extract_json(content)
-          summary  = result.get("summary","AI review")
+          result = extract_json(content)
+
+          # Если summary явно не русскоязычный — быстро переводим второй просьбой
+          def is_russian(txt):
+              cyr = len(re.findall(r'[А-Яа-яЁё]', txt))
+              lat = len(re.findall(r'[A-Za-z]', txt))
+              return cyr >= lat
+          summary = result.get("summary","")
+          if summary and not is_russian(summary):
+              tr_payload = {
+                  "model": AI_MODEL,
+                  "messages": [
+                      {"role":"system","content":"Переведи следующий текст на русский, сохраняя markdown-структуру: "},
+                      {"role":"user","content": summary}
+                  ],
+                  "max_tokens": 1200
+              }
+              _, tr_data = call_ai(tr_payload)
+              try:
+                  summary = (tr_data.get("choices") or [{}])[0].get("message",{}).get("content") or summary
+              except: pass
+
           comments = result.get("comments",[])
-          if not isinstance(comments,list): comments=[]
+          if not isinstance(comments, list): comments=[]
 
-          # 6) фильтруем только действительно добавленные строки
+          # Фильтрация по реально добавленным строкам
           added_map={}
           for f in files:
               if not f["path"]: continue
@@ -218,22 +204,29 @@ jobs:
           for c in comments:
               path=c.get("path"); line=c.get("line"); body=(c.get("body") or "").strip()
               if path in added_map and isinstance(line,int) and line in added_map[path] and body:
-                  filtered.append({"path":path,"line":line,"side":"RIGHT","body":body})
+                  filtered.append({"path":path,"line":line,"body":body})
 
-          # 7) публикуем review (или fallback — summary), без лишних \n\n
-          session = requests.Session()
-          session.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
+          sess = requests.Session()
+          sess.headers.update({"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
 
-          review_url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/reviews"
+          # 1) summary — как обычный комментарий к PR (issue comment)
           issues_url = f"https://api.github.com/repos/{REPO}/issues/{PR_NUMBER}/comments"
+          sess.post(issues_url, json={"body": f"**AI Review (RU)**\n{summary}"}, timeout=60)
 
-          if filtered:
-              body={"event":"COMMENT","body":summary, "comments":filtered[:50]}
-              r = session.post(review_url, json=body, timeout=60)
+          # 2) инлайн-комменты — через /pulls/{pr}/comments (line/side), чтобы ПОДСВЕТИТЬ КОНКРЕТНУЮ СТРОКУ
+          prc_url = f"https://api.github.com/repos/{REPO}/pulls/{PR_NUMBER}/comments"
+          for c in filtered[:60]:
+              payload = {
+                  "body": c["body"],
+                  "commit_id": HEAD,
+                  "path": c["path"],
+                  "side": "RIGHT",
+                  "line": c["line"]
+              }
+              r = sess.post(prc_url, json=payload, timeout=60)
               if r.status_code >= 300:
-                  session.post(issues_url, json={"body": f"**AI Review**\n{summary}"}, timeout=60)
-          else:
-              session.post(issues_url, json={"body": f"**AI Review**\n{summary}"}, timeout=60)
+                  # если что-то пошло не так — не ломаем джобу
+                  print(f"::warning::Inline comment failed for {c['path']}:{c['line']} -> {r.status_code} {r.text[:200]}")
 
           print("AI inline review done.")
           PY
