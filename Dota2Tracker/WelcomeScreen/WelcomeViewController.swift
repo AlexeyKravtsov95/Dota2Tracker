@@ -8,8 +8,8 @@
 import UIKit
 
 final class WelcomeViewController: UIViewController {
-    private lazy var bg: GradientBackgrounView = {
-        let background = GradientBackgrounView()
+    private lazy var bg: GradientBackgroundView = {
+        let background = GradientBackgroundView()
         background.translatesAutoresizingMaskIntoConstraints = false
         return background
     }()

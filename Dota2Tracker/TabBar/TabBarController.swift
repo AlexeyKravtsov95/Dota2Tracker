@@ -1,4 +1,6 @@
 import UIKit
+import SwiftUI
+import Dota2APIKit
 
 final class TabBarController: UITabBarController {
     private let selected = Palette.TabBar.selectedItemColor
@@ -7,25 +9,24 @@ final class TabBarController: UITabBarController {
 
     //App Controllers
     let overviewNavBarController = UINavigationController(rootViewController: OverviewViewController())
-    let liveNavBarController = UINavigationController(rootViewController: LiveViewController())
-    let ladderNavBarController = UINavigationController(rootViewController:LadderViewController())
-    let analyticsNavBarController = UINavigationController(rootViewController:AnalyticsViewController())
+    let ladderNavBarController = UINavigationController(rootViewController: LadderViewController())
+    let analyticsNavBarController = UINavigationController(rootViewController: AnalyticsViewController())
 
     //TabBar Buttons
     private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: selected)
-    private lazy var liveButton = getButton(icon: "play.fill", tag: 1, action: action)
-    private lazy var ladderButton = getButton(icon: "trophy.fill", tag: 2, action: action)
+    private lazy var ladderButton = getButton(icon: "trophy.fill", tag: 1, action: action)
+    private lazy var newsButton = getButton(icon: "newspaper", tag: 2, action: action)
     private lazy var analyticsButton = getButton(icon: "align.vertical.bottom.fill", tag: 3, action: action)
 
     //TabBar Buttons Titles
     private lazy var houseTitle = getTitle(text: "Overview", tag: 0, textColor: selected)
-    private lazy var liveTitle = getTitle(text: "Live", tag: 1)
-    private lazy var ladderTitle = getTitle(text: "Ladder", tag: 2)
+    private lazy var ladderTitle = getTitle(text: "Ladder", tag: 1)
+    private lazy var newsTitle = getTitle(text: "News", tag: 2)
     private lazy var analyticsTitle = getTitle(text: "Analytics", tag: 3)
 
     //TabBar Elements
     private lazy var houseElement = getTabBarElement(buttons: houseButton, title: houseTitle)
-    private lazy var liveElement = getTabBarElement(buttons: liveButton, title: liveTitle)
+    private lazy var newsElement = getTabBarElement(buttons: newsButton, title: newsTitle)
     private lazy var ladderElement = getTabBarElement(buttons: ladderButton, title: ladderTitle)
     private lazy var analyticsElement = getTabBarElement(buttons: analyticsButton, title: analyticsTitle)
 
@@ -47,11 +48,19 @@ final class TabBarController: UITabBarController {
         $0.isLayoutMarginsRelativeArrangement = true
 
         $0.addArrangedSubview(houseElement)
-        $0.addArrangedSubview(liveElement)
         $0.addArrangedSubview(ladderElement)
+        $0.addArrangedSubview(newsElement)
         $0.addArrangedSubview(analyticsElement)
         return $0
     }(UIStackView())
+
+    private lazy var newsNavBarController: UIViewController = {
+        let vm = NewsListModel(service: ServiceFactory.makeNewsService())
+        let swiftUIView = NewListView(vm: vm)
+        let host = UIHostingController(rootView: swiftUIView)
+        host.view.backgroundColor = .clear
+        return host
+    }()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -64,14 +73,13 @@ final class TabBarController: UITabBarController {
         tabBar.isHidden = true
 
         overviewNavBarController.tabBarItem = UITabBarItem(title: "Overview", image: nil, tag: 0)
-
-        liveNavBarController.tabBarItem = UITabBarItem(title: "Live", image: nil, tag: 1)
-        ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 2)
+        ladderNavBarController.tabBarItem = UITabBarItem(title: "Ladder", image: nil, tag: 1)
+        newsNavBarController.tabBarItem = UITabBarItem(title: "News", image: nil, tag: 2)
         analyticsNavBarController.tabBarItem = UITabBarItem(title: "Analytics", image: nil, tag: 3)
 
         setViewControllers([overviewNavBarController,
-                            liveNavBarController,
                             ladderNavBarController,
+                            newsNavBarController,
                             analyticsNavBarController], animated: false)
 
         NSLayoutConstraint.activate([
@@ -99,7 +107,7 @@ final class TabBarController: UITabBarController {
     }
 
     private func setButtonColor(tag: Int) {
-        [houseButton, liveButton, ladderButton, analyticsButton,].forEach { button in
+        [houseButton, ladderButton, newsButton, analyticsButton,].forEach { button in
             if button.tag != tag {
                 button.tintColor = nonSelected
             } else {
@@ -109,7 +117,7 @@ final class TabBarController: UITabBarController {
     }
 
     private func setTitleColor(tag: Int) {
-        [houseTitle, liveTitle, ladderTitle, analyticsTitle,].forEach { title in
+        [houseTitle, ladderTitle, newsTitle, analyticsTitle,].forEach { title in
             if title.tag != tag {
                 title.textColor = nonSelected
             } else {
