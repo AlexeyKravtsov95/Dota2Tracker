@@ -8,9 +8,9 @@ final class TabBarController: UITabBarController {
     private let main = Palette.TabBar.mainColor
 
     //App Controllers
-    let overviewNavBarController = UINavigationController(rootViewController: OverviewViewController())
-    let ladderNavBarController = UINavigationController(rootViewController: LadderViewController())
-    let analyticsNavBarController = UINavigationController(rootViewController: AnalyticsViewController())
+    let overviewNavBarController = OverviewViewController()
+    let ladderNavBarController = LadderViewController()
+    let analyticsNavBarController = AnalyticsViewController()
 
     //TabBar Buttons
     private lazy var houseButton = getButton(icon: "house.fill", tag: 0, action: action, tintColor: selected)
