@@ -33,7 +33,7 @@ final class PlayersCell: UITableViewCell {
         $0.contentMode = .scaleAspectFit
         $0.clipsToBounds = true
         $0.layer.cornerRadius = 23
-        $0.backgroundColor = .yellow
+        $0.backgroundColor = .systemGray3
         $0.translatesAutoresizingMaskIntoConstraints = false
         return $0
     }(UIImageView())
@@ -55,9 +55,9 @@ final class PlayersCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func viewWillAppear(_ animated: Bool) {
-        avatarImageView.layer.cornerRadius = avatarImageView.bounds.width / 2
-    }
+//    func viewWillAppear(_ animated: Bool) {
+//        avatarImageView.layer.cornerRadius = avatarImageView.bounds.width / 2
+//    }
 
     func setupCell(data: Player) {
         cellNameLabel.text = data.personaName

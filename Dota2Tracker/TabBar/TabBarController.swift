@@ -6,7 +6,7 @@ final class MainTabBarController: UITabBarController {
     private let main = Palette.TabBar.mainColor
 
     //App Controllers
-    let playerNavBarController = UINavigationController(rootViewController: OverviewViewController())
+    let playerNavBarController = UINavigationController(rootViewController: PlayerViewController())
     let ladderNavBarController = UINavigationController(rootViewController:LadderViewController())
     let analyticsNavBarController = UINavigationController(rootViewController:AnalyticsViewController())
 

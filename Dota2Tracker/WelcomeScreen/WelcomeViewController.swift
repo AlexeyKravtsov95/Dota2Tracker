@@ -10,10 +10,10 @@ import UIKit
 final class WelcomeViewController: UIViewController {
 
     let networkService = NetworkService()
-    var players: [Player] = []
+    var playersInfo: Welcome?
 
-    private lazy var bg: GradientBackgrounView = {
-        let background = GradientBackgrounView()
+    private lazy var bg: GradientBackgroundView = {
+        let background = GradientBackgroundView()
         background.translatesAutoresizingMaskIntoConstraints = false
         return background
     }()
@@ -147,14 +147,12 @@ final class WelcomeViewController: UIViewController {
 
     private func goPlayersList() {
         guard let nickname = textField.text, !nickname.isEmpty else { return }
-//        self.searchButton.isUserInteractionEnabled = false
-
-        networkService.sendRequest(name: nickname) { players in
+        networkService.sendRequest(name: nickname) { info in
             DispatchQueue.main.async {
-                self.players = players
+                self.playersInfo = info
                 self.textField.text = nil
                 let playersVC = OverviewViewController()
-                playersVC.players = self.players
+                playersVC.playersInfo = self.playersInfo
                 self.navigationController?.pushViewController(playersVC, animated: true)
             }
         }

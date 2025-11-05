@@ -2,12 +2,13 @@ import UIKit
 
 final class OverviewViewController: UIViewController {
 
-    var players: [Player] = []
+    var playersInfo: Welcome?
+    lazy var players = playersInfo?.players ?? []
 
-    private lazy var bg: GradientBackgrounView = {
+    private lazy var bg: GradientBackgroundView = {
         $0.translatesAutoresizingMaskIntoConstraints = false
         return $0
-    }(GradientBackgrounView())
+    }(GradientBackgroundView())
 
     lazy var tableView: UITableView = {
         $0.register(PlayersCell.self, forCellReuseIdentifier: PlayersCell.reuseId)
@@ -87,12 +88,12 @@ extension OverviewViewController: UITableViewDataSource, UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         let tabBarController = MainTabBarController()
-
-        if let window = view.window?.windowScene?.windows.first {
-            window.rootViewController = tabBarController
-            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
-                window.rootViewController = tabBarController
-            }, completion: nil)
-        }
+        navigationController?.pushViewController(tabBarController, animated: true)
+//        if let window = view.window?.windowScene?.windows.first {
+//            window.rootViewController = tabBarController
+//            UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
+//                window.rootViewController = tabBarController
+//            }, completion: nil)
+//        }
     }
 }

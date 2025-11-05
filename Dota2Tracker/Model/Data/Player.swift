@@ -24,4 +24,57 @@ struct Player: Decodable {
         case similarity = "similarity"
         case isOnline = "is_online"
     }
+
+    struct PlayerStat: Codable {
+        let status: String
+        let profile: PlayerStatProfile
+    }
+}
+// MARK: - PlayerStatProfile
+struct PlayerStatProfile: Codable {
+    let profile: Profile
+    let rankTier: Int
+    let leaderboardRank: String?
+    let computedRating: String?
+
+    enum CodingKeys: String, CodingKey {
+        case profile
+        case rankTier = "rank_tier"
+        case leaderboardRank = "leaderboard_rank"
+        case computedRating = "computed_rating"
+    }
+}
+
+// MARK: - Profile
+struct Profile: Codable {
+    let accountID: Int
+    let personaname: String
+    let name: String?
+    let plus: Bool
+    let cheese: Int
+    let steamid: String
+    let avatar: String
+    let avatarmedium: String
+    let avatarfull: String
+    let profileurl: String
+    let lastLogin: String?
+    let loccountrycode: String?
+    let status: String?
+    let fhUnavailable, isContributor, isSubscriber, isOnline: Bool
+    let rankIcon: String
+    let wins, losses: Int
+    let winrate: Double
+
+    enum CodingKeys: String, CodingKey {
+        case accountID = "account_id"
+        case personaname, name, plus, cheese, steamid, avatar, avatarmedium, avatarfull, profileurl
+        case lastLogin = "last_login"
+        case loccountrycode, status
+        case fhUnavailable = "fh_unavailable"
+        case isContributor = "is_contributor"
+        case isSubscriber = "is_subscriber"
+        case isOnline = "is_online"
+        case rankIcon = "rank_icon"
+        case wins, losses, winrate
+    }
 }

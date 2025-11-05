@@ -11,7 +11,7 @@ class NetworkService {
     var url: URL?
     var request: URLRequest?
     
-    func sendRequest(name: String, completion: @escaping ([Player]) -> ()) {
+    func sendRequest(name: String, completion: @escaping (Welcome) -> ()) {
         var urlComponents = URLComponents()
         urlComponents.scheme = "https"
         urlComponents.host = "dota2-telegram-bot-production.up.railway.app"
@@ -32,7 +32,7 @@ class NetworkService {
                 if let jsonData = data {
                     do {
                         let playerResponse = try JSONDecoder().decode(Welcome.self, from: jsonData)
-                        completion(playerResponse.players)
+                        completion(playerResponse)
                     } catch {
                         print(error.localizedDescription)
                     }

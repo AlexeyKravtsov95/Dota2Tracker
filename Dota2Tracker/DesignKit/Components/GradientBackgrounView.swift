@@ -7,7 +7,7 @@
 
 import UIKit
 
-final class GradientBackgrounView: UIView {
+final class GradientBackgroundView: UIView {
 
     private let base = CAGradientLayer()
     private let firstSpot = CAGradientLayer()
